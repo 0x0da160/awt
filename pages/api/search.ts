@@ -21,7 +21,7 @@ export default async function handler(
   const result = await customsearch.cse.list({
     c2coff: "1",
     cr: "countryJP",
-    cx: "85f6e6689264d4377",
+    cx: process.env.GOOGLE_CUSTOM_SEARCH_API_CX,
     gl: "jp",
     hl: "ja",
     lr: "lang_ja",
