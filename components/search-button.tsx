@@ -35,13 +35,14 @@ export default function SearchButton(props: {
         props.onSearchStart();
 
         const searchApiUrl = new URL("/api/search", window.location.origin);
-        searchApiUrl.searchParams.append("q", props.query);
+        searchApiUrl.searchParams.append("query", props.query);
         const searchApiResponse = await fetch(searchApiUrl.toString());
         const searchApiResponseData =
           (await searchApiResponse.json()) as SearchApiResponseData;
         props.onSearchEnd(searchApiResponseData);
 
         const crawlApiUrl = new URL("/api/crawl", window.location.origin);
+        crawlApiUrl.searchParams.append("query", props.query);
         searchApiResponseData.result.data.items?.map((v) => {
           crawlApiUrl.searchParams.append("urls", v.link + "");
         });

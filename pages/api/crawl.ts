@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { CheerioCrawler, Configuration } from "crawlee";
+import filenamify from "filenamify";
 
 type HeadingStructure = {
   title: string;
@@ -12,14 +13,16 @@ type Heading = {
 };
 
 export type ResponseData = {
+  query: string;
   result: HeadingStructure[];
+  filename: string;
 };
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ResponseData>,
 ) {
-  const { urls } = req.query as { urls: string[] };
+  const { urls, query } = req.query as { urls: string[]; query: string };
   const result = <HeadingStructure[]>[];
   const config = new Configuration({
     purgeOnStart: true,
@@ -27,7 +30,9 @@ export default async function handler(
 
   const crawler = new CheerioCrawler(
     {
-      requestHandlerTimeoutSecs: 10,
+      requestHandlerTimeoutSecs: 3,
+      retryOnBlocked: false,
+      maxRequestRetries: 1,
 
       async requestHandler({ $, request }) {
         const title = $("title").text();
@@ -58,5 +63,11 @@ export default async function handler(
 
   await crawler.run(urls);
 
-  res.status(200).json({ result });
+  const filename = filenamify(`awt_${query}_crawl_result.csv`);
+
+  res.status(200).json({
+    query,
+    result,
+    filename,
+  });
 }

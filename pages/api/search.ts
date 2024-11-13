@@ -1,4 +1,5 @@
 import { customsearch_v1 } from "@googleapis/customsearch";
+import filenamify from "filenamify";
 
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { GaxiosResponse } from "gaxios";
@@ -6,13 +7,14 @@ import type { GaxiosResponse } from "gaxios";
 export type ResponseData = {
   query: string;
   result: GaxiosResponse<customsearch_v1.Schema$Search>;
+  filename: string;
 };
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ResponseData>,
 ) {
-  const { q } = req.query as { q: string };
+  const { query } = req.query as { query: string };
 
   const customsearch = new customsearch_v1.Customsearch({
     auth: process.env.GOOGLE_CUSTOM_SEARCH_API_KEY,
@@ -26,8 +28,10 @@ export default async function handler(
     hl: "ja",
     lr: "lang_ja",
     num: 10,
-    q,
+    q: query,
   });
 
-  res.status(200).json({ query: q, result });
+  const filename = filenamify(`awt_${query}_search_result.csv`);
+
+  res.status(200).json({ query, result, filename });
 }

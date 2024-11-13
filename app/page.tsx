@@ -1,10 +1,13 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import SearchButton from "../components/search-button";
+import BulkSearchButton from "@/components/bulk-search-button";
+
 import { Input } from "../components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Download } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 import { Button } from "@/components/ui/button";
 
@@ -35,6 +38,11 @@ export default function Home() {
   const [cursorIndex, setCursorIndex] = useState<number | null>(null);
   const [bom, setBom] = useState(true);
 
+  const [queryIndex, setQueryIndex] = useState(0);
+  const [queryCount, setQueryCount] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [processing, setProcessing] = useState(false);
+
   const queryInputRef = useRef<HTMLInputElement>(null);
   const queryTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -55,6 +63,55 @@ export default function Home() {
       }
     }
   });
+
+  function downloadSearchResult(response: SearchApiResponseData) {
+    if (response.result.data?.items?.length) {
+      const data = [] as string[][];
+      response.result.data.items?.forEach((v, i) => {
+        data.push([i + 1 + "", v.title ?? "", v.snippet ?? "", v.link ?? ""]);
+      });
+      const header = ["順位", "タイトル", "スニペット", "リンク"];
+      const csv = csvStringify([header, ...data]);
+      const blob = new Blob([bom ? "\uFEFF" + csv : csv], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", response.filename);
+      link.click();
+      URL.revokeObjectURL(url);
+    } else {
+      console.error(response);
+    }
+  }
+
+  function downloadCrawlResult(response: CrawlApiResponseData) {
+    if (response.result) {
+      const data = [] as string[][];
+      response.result.forEach((v, i) => {
+        const headingsString = [] as string[];
+        v.headings.forEach((v) => {
+          headingsString.push(`<${v.level}>${v.text}</${v.level}>`);
+        });
+
+        data.push([i + 1 + "", v.title, v.url, headingsString.join("\n")]);
+      });
+      const header = ["順位", "タイトル", "URL", "見出し構造"];
+      const csv = csvStringify([header, ...data]);
+      const blob = new Blob([bom ? "\uFEFF" + csv : csv], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", response.filename);
+      link.click();
+      URL.revokeObjectURL(url);
+    } else {
+      console.error(response);
+    }
+  }
 
   return (
     <div className="p-16">
@@ -140,21 +197,70 @@ export default function Home() {
             )}
           </div>
           <div>
-            <SearchButton
-              query={query}
-              onSearchStart={() => {
-                setSearchResponse(undefined);
-                setCrawlResponse(undefined);
-              }}
-              onSearchEnd={(response) => {
-                setSearchResponse(response);
-              }}
-              onCrawlEnd={(response) => {
-                setCrawlResponse(response);
-              }}
-            />
+            {multiline ? (
+              <BulkSearchButton
+                query={query}
+                onSearchStart={(count) => {
+                  setProcessing(true);
+                  setSearchResponse(undefined);
+                  setCrawlResponse(undefined);
+                  setQueryIndex(0);
+                  setQueryCount(count);
+                }}
+                onSearchEnd={(response, progress, index, count) => {
+                  setSearchResponse(response);
+                  setCrawlResponse(undefined);
+                  downloadSearchResult(response);
+                  setProgress(progress);
+                  setQueryIndex(index);
+                  setQueryCount(count);
+                }}
+                onCrawlEnd={(response, progress, index, count) => {
+                  setCrawlResponse(response);
+                  downloadCrawlResult(response);
+                  setProgress(progress);
+                  setQueryIndex(index);
+                  setQueryCount(count);
+                }}
+                onProcessEnd={() => {
+                  setProcessing(false);
+                }}
+              />
+            ) : (
+              <SearchButton
+                query={query}
+                onSearchStart={() => {
+                  setProcessing(true);
+                  setSearchResponse(undefined);
+                  setCrawlResponse(undefined);
+                }}
+                onSearchEnd={(response) => {
+                  setProgress(50);
+                  setSearchResponse(response);
+                }}
+                onCrawlEnd={(response) => {
+                  setCrawlResponse(response);
+                  setProcessing(false);
+                }}
+              />
+            )}
           </div>
         </div>
+
+        {multiline && processing && (
+          <div className="flex w-full items-center space-x-2 my-4">
+            <div className="grow">
+              <Progress value={progress} />
+            </div>
+
+            <div>
+              <Badge variant="outline" className="mr-2">
+                {queryIndex + 1} / {queryCount}
+              </Badge>
+              <Badge variant="outline">{Math.round(progress)} %</Badge>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-row gap-4">
           <div className="basis-1/2">
@@ -183,7 +289,7 @@ export default function Home() {
             })}
           </div>
           <div className="basis-1/2">
-            {crawlResponse && (
+            {searchResponse && crawlResponse && (
               <>
                 <div className="mb-2 flex">
                   <div>
@@ -231,79 +337,8 @@ export default function Home() {
                         variant="outline"
                         size="icon"
                         onClick={() => {
-                          if (searchResponse?.result.data?.items?.length) {
-                            const data = [] as string[][];
-                            searchResponse?.result.data.items?.forEach(
-                              (v, i) => {
-                                data.push([
-                                  i + 1 + "",
-                                  v.title ?? "",
-                                  v.snippet ?? "",
-                                  v.link ?? "",
-                                ]);
-                              },
-                            );
-                            const header = [
-                              "順位",
-                              "タイトル",
-                              "スニペット",
-                              "リンク",
-                            ];
-                            const csv = csvStringify([header, ...data]);
-                            const blob = new Blob(
-                              [bom ? "\uFEFF" + csv : csv],
-                              {
-                                type: "text/csv;charset=utf-8;",
-                              },
-                            );
-                            const url = URL.createObjectURL(blob);
-                            const link = document.createElement("a");
-                            link.setAttribute("href", url);
-                            link.setAttribute("download", "search_result.csv");
-                            link.click();
-                            URL.revokeObjectURL(url);
-                          } else {
-                            console.error(searchResponse);
-                          }
-                          if (crawlResponse.result) {
-                            const data = [] as string[][];
-                            crawlResponse.result.forEach((v, i) => {
-                              const headingsString = [] as string[];
-                              v.headings.forEach((v) => {
-                                headingsString.push(
-                                  `<${v.level}>${v.text}</${v.level}>`,
-                                );
-                              });
-
-                              data.push([
-                                i + 1 + "",
-                                v.title,
-                                v.url,
-                                headingsString.join("\n"),
-                              ]);
-                            });
-                            const header = [
-                              "順位",
-                              "タイトル",
-                              "URL",
-                              "見出し構造",
-                            ];
-                            const csv = csvStringify([header, ...data]);
-                            const blob = new Blob(
-                              [bom ? "\uFEFF" + csv : csv],
-                              {
-                                type: "text/csv;charset=utf-8;",
-                              },
-                            );
-                            const url = URL.createObjectURL(blob);
-                            const link = document.createElement("a");
-                            link.setAttribute("href", url);
-                            link.setAttribute("download", "crawl_result.csv");
-                            link.click();
-                            URL.revokeObjectURL(url);
-                          } else {
-                            console.error(searchResponse);
-                          }
+                          downloadSearchResult(searchResponse);
+                          downloadCrawlResult(crawlResponse);
                         }}
                       >
                         <Download />
