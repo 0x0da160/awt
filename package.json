@@ -27,6 +27,7 @@
     "clsx": "^2.1.1",
     "crawlee": "^3.11.5",
     "csv-stringify": "^6.5.1",
+    "filenamify": "^6.0.0",
     "lucide-react": "^0.454.0",
     "next": "15.0.1",
     "react": "19.0.0-rc-69d4b800-20241021",
